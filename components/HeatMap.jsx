@@ -1,9 +1,13 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import * as d3 from "d3";
 import Tooltip from "./Tooltip";
 import Legend from "./Legend";
 
 const HeatMap = () => {
+  // Estado para almacenar datos y la temperatura base
+  const [dataset, setDataset] = useState([]);
+  const [baseTemperature, setBaseTemperature] = useState(null);
+
   useEffect(() => {
     const width = 1000;
     const height = 500;
@@ -14,14 +18,17 @@ const HeatMap = () => {
       .attr("width", width)
       .attr("height", height);
 
-    // Fetch the dataset
+    // Fetch data
     d3.json(
       "https://raw.githubusercontent.com/freeCodeCamp/ProjectReferenceData/master/global-temperature.json"
     ).then((data) => {
       const dataset = data.monthlyVariance;
       const baseTemperature = data.baseTemperature;
 
-      // Usamos scaleBand para el eje X, ya que tenemos años en un dominio no numérico
+      setDataset(dataset);
+      setBaseTemperature(baseTemperature);
+
+      // Escalas
       const xScale = d3
         .scaleBand()
         .domain(dataset.map((d) => d.year))
@@ -54,41 +61,46 @@ const HeatMap = () => {
           d3.max(dataset, (d) => baseTemperature + d.variance),
         ]);
 
-      // Dibujar los rectángulos para las celdas (mes/año)
+      // Dibujar las celdas
       svg
         .selectAll(".cell")
         .data(dataset)
         .enter()
         .append("rect")
         .attr("class", "cell")
-        .attr("x", (d) => xScale(d.year)) // Escala para el eje X (año)
-        .attr(
-          "y",
-          (d) => yScale(d3.timeFormat("%b")(new Date(d.year, d.month - 1))) // Mes
+        .attr("x", (d) => xScale(d.year))
+        .attr("y", (d) =>
+          yScale(d3.timeFormat("%b")(new Date(d.year, d.month - 1)))
         )
-        .attr("width", xScale.bandwidth()) // Ancho de las celdas con la escala de bandas
+        .attr("width", xScale.bandwidth())
         .attr("height", yScale.bandwidth())
         .attr("data-month", (d) => d.month - 1)
         .attr("data-year", (d) => d.year)
         .attr("data-temp", (d) => baseTemperature + d.variance)
         .style("fill", (d) => colorScale(baseTemperature + d.variance))
+        .style("stroke", "none")
+        .style("stroke-width", "2px")
         .on("mouseover", function (event, d) {
+          d3.select(this).style("stroke", "black");
+
           const month = d3.timeFormat("%B")(new Date(d.year, d.month - 1));
           const year = d.year;
           const temp = baseTemperature + d.variance;
-          const tooltip = d3
-            .select("#tooltip")
+
+          d3.select("#tooltip")
             .style("left", `${event.pageX + 10}px`)
             .style("top", `${event.pageY - 25}px`)
             .attr("data-year", year)
-            .html(`Year: ${year}<br>Month: ${month}<br>Temp: ${temp}°C`);
-          tooltip.transition().style("opacity", 1);
+            .html(`Year: ${year}<br>Month: ${month}<br>Temp: ${temp}°C`)
+            .transition()
+            .style("opacity", 1);
         })
         .on("mouseout", function () {
+          d3.select(this).style("stroke", "none");
           d3.select("#tooltip").transition().style("opacity", 0);
         });
 
-      // Crear el eje X con ticks cada 10 años y formato adecuado
+      // Eje X
       svg
         .append("g")
         .attr("id", "x-axis")
@@ -102,44 +114,31 @@ const HeatMap = () => {
                 10
               )
             )
-            .tickFormat(d3.format("d")) // Muestra los años como números enteros
+            .tickFormat(d3.format("d"))
         )
         .attr("transform", `translate(0, ${height - margin.bottom})`);
 
-      // Dibujar el eje Y
+      // Eje Y
       svg
         .append("g")
         .attr("id", "y-axis")
         .attr("transform", `translate(${margin.left}, 0)`)
         .call(d3.axisLeft(yScale));
-
-      // Título
-      svg
-        .append("text")
-        .attr("id", "title")
-        .attr("x", width / 2)
-        .attr("y", margin.top / 2)
-        .attr("text-anchor", "middle")
-        .text("Monthly Global Land-Surface Temperature");
-
-      // Descripción
-      svg
-        .append("text")
-        .attr("id", "description")
-        .attr("x", width / 2)
-        .attr("y", margin.top + 30)
-        .attr("text-anchor", "middle")
-        .text(
-          "Temperature data from 1753 - 2015, with base temperature of 8.66°C"
-        );
     });
   }, []);
 
   return (
-    <div>
+    <div className="heatmap-container">
+      {/* Gráfico y leyenda */}
       <svg id="heatmap"></svg>
       <Tooltip />
-      <Legend />
+      {dataset.length > 0 && baseTemperature !== null && (
+        <Legend
+          colorScale={d3.scaleSequential(d3.interpolateCool)}
+          minTemp={d3.min(dataset, (d) => baseTemperature + d.variance)}
+          maxTemp={d3.max(dataset, (d) => baseTemperature + d.variance)}
+        />
+      )}
     </div>
   );
 };
